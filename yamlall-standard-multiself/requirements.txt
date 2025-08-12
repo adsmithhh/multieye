@@ -1,0 +1,4 @@
+pyyaml
+numpy
+flake8
+pytest

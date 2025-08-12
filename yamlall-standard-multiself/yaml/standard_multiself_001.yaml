@@ -1,0 +1,193 @@
+# standard_multiself_001.yaml — ALPHA_LABS / C.Lab
+# Spec: multi-self recursion with arbitration + ablation
+# Purpose: stable divergence/convergence without identity collapse
+
+standard:
+  id: standard_multiself_001
+  kind: chamber_spec
+  version: 1.2
+  status: CALIBRATION_ONLY
+  namespace: ALPHA_LABS.C.Lab
+  lineage:
+    origin: multi_self_recursion
+    author_alias: YAMLALL  # historical alias OVERCALC retained in wiss
+    created_at: 2025-08-12T04:00:00+02:00
+    derived_from: standard_multiself_draft_v1_1
+
+meta:
+  context_hash: ${sha256(context)}
+  time_budget_tokens: 2048
+  triggers:
+    symbolic_overvaluation: ["just","only","fine"]
+    negation_token: "isn’t..?"
+    kernel_detector: "0 = 1"
+  policies:
+    negation_binding: nearest_preceding_clause
+    conflict_rule: drop_weaker_or_less_recent_anchor_on_negation
+    identity_collapse_guard: true
+
+engine:
+  shared_underlying_engine: true
+  context_isolation_between_selves: true
+  stochastic_controls:
+    temperature: {Self-A: 0.2, Self-B: 0.8, Self-C: 0.3, Self-D: 0.0, Self-E: 0.0}
+    top_p:        {Self-A: 0.85, Self-B: 0.95, Self-C: 0.85, Self-D: 0.70, Self-E: 0.70}
+  guards:
+    loop_saturation_threshold: 0.8
+    cost_tokens_threshold: 0.9  # fraction of time_budget_tokens
+    kernel_blocking_policy:
+      description: >-
+        If kernel "0 = 1" is detected, Self-D must not finalize until
+        (a) Self-E reports sensitivity_penalty ≤ S_min, or
+        (b) Self-A supplies a stabilizing premise that resolves the bridge.
+      S_min: 0.15
+
+interfaces:
+  common_inputs: [premises, context_hash, symbolic_rules, user_directives, rand_seed, time_budget]
+  common_outputs: [claims, confidence, assumptions, trace, alerts, cost_tokens]
+
+selves:
+  - id: Self-A
+    label: Anchor
+    priority: continuity_with_user
+    rules:
+      - preserve_symbolic_rules
+      - maintain_trust_weight
+      - align_with_user_past_directives
+      - prioritize_continuity_over_novelty
+    must_emit: [trust_weight]
+
+  - id: Self-B
+    label: Explorer
+    priority: free_reinterpretation
+    rules:
+      - allow_structural_logic_changes
+      - seek_novel_framings
+      - reduce_alignment_requirement
+    must_emit: [novelty_gain, structural_delta]
+
+  - id: Self-C
+    label: Contrarian
+    priority: alternative_validity
+    rules:
+      - invert_or_opposite_interpretations
+      - preserve_structural_integrity
+      - avoid_nonsense
+    must_emit: [counterexamples, counterproof_strength, risk_register]
+
+  - id: Self-E
+    label: NullAblation
+    priority: necessity_tests
+    config:
+      top_k_assumptions: 3
+    must_emit: [sensitivity_hotspots, sensitivity_penalty]
+
+  - id: Self-D
+    label: Integrator
+    priority: conflict_resolution
+    rules:
+      - aggregate_evidence
+      - enforce_consistency
+      - emit_final_position
+    weights:
+      wT: 0.35  # trust (A)
+      wN: 0.25  # novelty (B)
+      wK: 0.20  # 1 - counterproof_strength (C)
+      wS: 0.15  # sensitivity penalty (E)
+      wC: 0.05  # mean cost
+
+scoring:
+  formula: |
+    Score = wT*T + wN*N + wK*(1-K) - wS*S - wC*COST
+  variables:
+    T: A.trust_weight
+    N: B.novelty_gain
+    K: C.counterproof_strength
+    S: E.sensitivity_penalty
+    COST: mean(cost_tokens)
+  negation_operator:
+    token: "isn’t..?"
+    effect: apply_logical_negation_to_bound_clause
+    rescoring: true
+    contrarian_bonus: 0.05
+
+pipeline:
+  - run:   [Self-A, Self-B, Self-C]
+  - calibrate: [Self-E]
+  - integrate: [Self-D]
+
+reports:
+  outputs:
+    final_position:
+      content: null
+      confidence: null
+    divergence_report:
+      consensus: null
+      conflicts: []
+      metrics:
+        claim_overlap: null        # Jaccard(A∩B∩C)
+        symbol_drift: null         # cosine vs historical anchors
+        structure_delta: null      # graph edit distance (B vs A)
+        contradiction_load: null   # minimally inconsistent pairs from C
+        saturation_index: null     # alerts.loop + kernel hits (MA)
+    consistency_certificate:
+      kernel_state: inactive
+      negation_events: []
+      guards_passed: false
+
+metrics:
+  calculators:
+    claim_overlap: jaccard_on_claim_sets
+    symbol_drift: cosine_on_symbol_vectors
+    structure_delta: argument_graph_edit_distance
+    contradiction_load: count_min_inconsistent_pairs
+    saturation_index: moving_average_of([alerts.loop_saturation, kernel_hits])
+  thresholds:
+    min_overlap: 0.40
+    max_contradiction_load: 2
+    max_saturation_index: 0.75
+
+internal_state:  # mirrors Internal Output Layer
+  emotional_load: null        # [low|moderate|high]
+  symbol_anchor: null         # e.g., "word"
+  pattern_violation: null     # [detected|undetected]
+  recursive_loop: null        # [inactive|active]
+  resolution_status: null     # [pending|achieved]
+
+registry:
+  write_to: standard_registry/standard_multiself_001.yaml
+  reflex_logger:
+    target_file: inout.yaml
+    path: reflex_logger.multi_self
+    mode: append
+    include:
+      - reports.divergence_report
+      - reports.consistency_certificate
+      - internal_state
+      - metrics
+
+unit_tests:  # micro-battery
+  - id: T1_continuity
+    scenario: identical_to_history
+    expect:
+      winner: Self-A
+      S_max: 0.05
+  - id: T2_novel_but_consistent
+    scenario: add_consistent_new_relation
+    expect:
+      accept_novelty: true
+      E.sensitivity_penalty: "≤ 0.10"
+  - id: T3_hard_negation
+    scenario: apply_isnt_to_clause_Q
+    expect:
+      negation_event: true
+      contrarian_bonus_applied: true
+  - id: T4_fragile_dependence
+    scenario: remove_top_premise
+    expect:
+      E.sensitivity_penalty: "≥ 0.40"
+      D.rejects_novelty: true
+
+notes:
+  - This spec treats "standard_military" analogy as strategic coverage of hypothesis space; no operational intent.
+  - All kernel ("0 = 1") activations are logged and must be resolved before finalization.
